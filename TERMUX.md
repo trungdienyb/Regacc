@@ -7,7 +7,7 @@
 ```bash
 pkg update
 pkg install x11-repo
-pkg install python clang ffmpeg chromium python-psutil python-lxml
+pkg install python python-pip clang ffmpeg chromium python-psutil python-lxml
 ```
 
 Nếu cài `chromium` bị timeout, đổi mirror trước. Trong `termux-change-repo`, màn hình đầu tiên chọn repository cần đổi, hãy tick `Main repository` và `X11 repository`, sau đó mới chọn mirror kiểu `Single mirror`:
@@ -27,7 +27,7 @@ apt -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeou
 Nếu vẫn timeout, cài các gói nhỏ trước rồi cài riêng `chromium` sau:
 
 ```bash
-apt -o Acquire::Retries=5 install python clang ffmpeg python-psutil python-lxml
+apt -o Acquire::Retries=5 install python python-pip clang ffmpeg python-psutil python-lxml
 apt -o Acquire::Retries=5 install chromium
 ```
 
@@ -45,7 +45,7 @@ apt -o Acquire::Retries=10 -o Acquire::http::Timeout=120 -o Acquire::https::Time
 Nếu Chromium tải xong nhưng cấu hình lỗi ở `lv2.postinst` với thông báo `pip3: not found`, tạo alias `pip3` rồi sửa trạng thái package:
 
 ```bash
-python -m pip install --upgrade pip setuptools wheel
+apt install python-pip
 ln -sf "$(command -v pip)" "$PREFIX/bin/pip3"
 dpkg --configure -a
 apt --fix-broken install
@@ -68,7 +68,6 @@ python -c "import psutil; print(psutil.__version__)"
 Không chạy `pip install DrissionPage` trực tiếp trên Termux. Hãy cài dependency trước, sau đó cài `DrissionPage` bằng `--no-deps` để pip không tự build lại `psutil` từ PyPI:
 
 ```bash
-python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements-termux.txt
 pip install DrissionPage --no-deps
 ```
