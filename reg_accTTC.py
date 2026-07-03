@@ -8,7 +8,7 @@ import queue
 import math
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from GoogleRecaptchaBypass.RecaptchaSolver import RecaptchaSolver
+from GoogleRecaptchaBypass.RecaptchaSolver import AudioChallengeUnavailableError, RecaptchaSolver
 from DrissionPage import ChromiumPage, ChromiumOptions
 from pydub import AudioSegment
 import pydub.utils
@@ -35,6 +35,7 @@ console = Console()
 SCREEN_WIDTH = 0
 SCREEN_HEIGHT = 0
 RUNTIME_CONFIG = {}
+CAPTCHA_AUDIO_BACKOFF_SECONDS = 60 if IS_TERMUX else 20
 
 logging.basicConfig(
     filename=LOG_FILE,
@@ -358,7 +359,23 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
             time.sleep(2)
 
             update_state(thread_states, worker_id, "Đang giải mã âm thanh reCAPTCHA...", "magenta")
-            recaptchaSolver.solveCaptcha()
+            try:
+                recaptchaSolver.solveCaptcha()
+            except AudioChallengeUnavailableError:
+                logger.warning(
+                    "Thread-%s: Google không cung cấp audio source reCAPTCHA; chờ %s giây rồi reset session.",
+                    worker_id,
+                    CAPTCHA_AUDIO_BACKOFF_SECONDS,
+                    exc_info=True,
+                )
+                update_state(
+                    thread_states,
+                    worker_id,
+                    f"Audio CAPTCHA không khả dụng, chờ {CAPTCHA_AUDIO_BACKOFF_SECONDS}s...",
+                    "yellow",
+                )
+                time.sleep(CAPTCHA_AUDIO_BACKOFF_SECONDS)
+                continue
             
             if check_recaptcha_success(driver, timeout=25):
                 update_state(thread_states, worker_id, "CAPTCHA thành công! Đang điền form...", "green")

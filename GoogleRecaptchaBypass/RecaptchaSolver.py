@@ -16,6 +16,9 @@ DEBUG_DIR = Path(os.getenv("RECAPTCHA_DEBUG_DIR", "recaptcha_debug"))
 class RecaptchaSolverError(Exception):
     """Raised when a reCAPTCHA solving stage fails with preserved root cause."""
 
+class AudioChallengeUnavailableError(RecaptchaSolverError):
+    """Raised when Google does not provide an audio challenge source."""
+
 def driver_context(driver: ChromiumPage) -> str:
     context = []
     try:
@@ -138,6 +141,9 @@ class RecaptchaSolver:
                     return
                 raise RecaptchaSolverError("Audio response submitted but captcha was not solved")
 
+        except AudioChallengeUnavailableError:
+            logger.warning("Audio challenge không khả dụng. %s", driver_context(self.driver), exc_info=True)
+            raise
         except RecaptchaSolverError:
             logger.exception("Solve reCAPTCHA thất bại. %s", driver_context(self.driver))
             raise
@@ -302,7 +308,9 @@ class RecaptchaSolver:
             snapshot_path,
             self._frame_snapshot(iframe),
         )
-        raise RecaptchaSolverError("Cannot find reCAPTCHA audio source after clicking audio button") from last_error
+        raise AudioChallengeUnavailableError(
+            "Google did not provide a reCAPTCHA audio source after clicking audio button"
+        ) from last_error
 
     def _solve_audio_challenge(self, iframe) -> Optional[str]:
         try:

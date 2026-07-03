@@ -108,6 +108,8 @@ Log ngoại lệ được ghi vào:
 tail -f reg_accTTC.log
 ```
 
+Nếu log có `Audio CAPTCHA không khả dụng` hoặc `Google did not provide a reCAPTCHA audio source`, nghĩa là reCAPTCHA trên Chromium headless/Termux không cung cấp audio challenge. Tool sẽ tự chờ một khoảng rồi reset session thay vì retry liên tục.
+
 Khi test Chromium headless, các warning kiểu `Failed to connect to the bus` hoặc `inotify/max_user_watches` thường là log môi trường Termux và không nhất thiết là lỗi nếu Chromium vẫn trả HTML:
 
 ```bash
