@@ -94,3 +94,16 @@ python reg_accTTC.py -t 1 --browser-path "$(which chromium)"
 ```
 
 Nếu không dùng Termux:X11 hoặc không có biến `DISPLAY`, script sẽ tự chạy Chromium ở chế độ headless.
+
+Chọn preset mobile hoặc PC:
+
+```bash
+python reg_accTTC.py --mobile -t 1 --browser-path "$(which chromium-browser)"
+python reg_accTTC.py --pc -t 3 --browser-path "$(which chromium-browser)"
+```
+
+Log ngoại lệ được ghi vào:
+
+```bash
+tail -f reg_accTTC.log
+```

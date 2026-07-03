@@ -1,6 +1,6 @@
 import argparse
+import logging
 import os, time, random, string, secrets
-import platform
 import shutil
 import tempfile
 import threading
@@ -24,6 +24,7 @@ from rich.prompt import IntPrompt
 # ======================================================================
 BASE_DIR = Path(__file__).resolve().parent
 ACCOUNTS_FILE = BASE_DIR / "acc_ttcReg.txt"
+LOG_FILE = BASE_DIR / "reg_accTTC.log"
 IS_TERMUX = bool(os.environ.get("TERMUX_VERSION")) or "com.termux" in os.environ.get("PREFIX", "")
 
 IS_RUNNING = True  
@@ -34,6 +35,26 @@ console = Console()
 SCREEN_WIDTH = 0
 SCREEN_HEIGHT = 0
 RUNTIME_CONFIG = {}
+
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] [%(threadName)s] %(message)s",
+    encoding="utf-8",
+)
+logger = logging.getLogger("reg_accTTC")
+
+def log_exception(message: str):
+    logger.exception(message)
+
+def thread_exception_hook(args):
+    logger.error(
+        "Uncaught thread exception in %s",
+        args.thread.name if args.thread else "unknown",
+        exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+    )
+
+threading.excepthook = thread_exception_hook
 
 def find_executable(env_names, candidates):
     for env_name in env_names:
@@ -94,7 +115,44 @@ def parse_args():
         action="store_true",
         help="Không resize/sắp xếp cửa sổ trình duyệt.",
     )
+    parser.add_argument(
+        "--mobile",
+        action="store_true",
+        help="Áp dụng preset mobile/Termux khi chọn số luồng.",
+    )
+    parser.add_argument(
+        "--pc",
+        action="store_true",
+        help="Áp dụng preset PC khi chọn số luồng.",
+    )
     return parser.parse_args()
+
+def choose_thread_count(args) -> int:
+    if args.mobile and args.pc:
+        console.print("[bold red]Chỉ được chọn một trong --mobile hoặc --pc.[/]")
+        raise SystemExit(1)
+
+    is_mobile_mode = args.mobile or (IS_TERMUX and not args.pc)
+    default_threads = 1 if is_mobile_mode else 3
+    recommendation = "Mobile/Termux: 1 - 2" if is_mobile_mode else "PC: 2 - 6"
+
+    if args.threads is not None:
+        num_threads = args.threads
+    else:
+        num_threads = IntPrompt.ask(
+            f"\n[bold yellow]Nhập số lượng luồng chạy đồng thời ({recommendation})[/]",
+            default=default_threads,
+        )
+
+    if num_threads < 1:
+        console.print("[bold red]Số luồng phải lớn hơn hoặc bằng 1.[/]")
+        raise SystemExit(1)
+
+    if is_mobile_mode and num_threads > 2:
+        logger.warning("Mobile/Termux đang chạy %s luồng, có thể quá tải RAM/CPU.", num_threads)
+        console.print("[yellow]Cảnh báo: Mobile/Termux nên chạy 1 - 2 luồng để ổn định hơn.[/]")
+
+    return num_threads
 
 # ======================================================================
 # HÀM XỬ LÝ GIAO DIỆN CONSOLE
@@ -145,6 +203,7 @@ def init_screen_metrics():
             SCREEN_WIDTH = max(terminal_size.columns * 8, 800)
             SCREEN_HEIGHT = max(terminal_size.lines * 18, 600)
     except Exception:
+        log_exception("Không lấy được kích thước màn hình, dùng fallback.")
         SCREEN_WIDTH = 1280
         SCREEN_HEIGHT = 720 
 
@@ -184,7 +243,7 @@ def file_writer_worker():
             except queue.Empty:
                 continue
             except Exception:
-                pass
+                log_exception("Lỗi ghi tài khoản vào file.")
 
 # ======================================================================
 # CÁC HÀM XỬ LÝ LÕI (CORE LOGIC)
@@ -205,7 +264,8 @@ def check_recaptcha_success(driver, timeout=30) -> bool:
                 return True
             time.sleep(0.5)
         return False
-    except:
+    except Exception:
+        log_exception("Lỗi kiểm tra trạng thái reCAPTCHA.")
         return False
 
 # ======================================================================
@@ -248,11 +308,13 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
                 driver.set.window.size(w, h)
                 driver.set.window.location(x, y)
             except Exception:
+                log_exception(f"Thread-{worker_id}: không thể sắp xếp/resize cửa sổ.")
                 update_state(thread_states, worker_id, "Bỏ qua sắp xếp cửa sổ trên môi trường hiện tại.", "yellow")
         
         recaptchaSolver = RecaptchaSolver(driver)
         
     except Exception as e:
+        log_exception(f"Thread-{worker_id}: lỗi khởi tạo trình duyệt.")
         update_state(thread_states, worker_id, f"Lỗi khởi tạo: {e}", "red")
         if user_data_path:
             shutil.rmtree(user_data_path, ignore_errors=True)
@@ -265,8 +327,8 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
             try:
                 driver.cookies.clear()
                 driver.run_js("localStorage.clear(); sessionStorage.clear();")
-            except:
-                pass
+            except Exception:
+                log_exception(f"Thread-{worker_id}: lỗi làm sạch session.")
             
             update_state(thread_states, worker_id, "Truy cập mục tiêu...", "yellow")
             driver.get("https://tuongtaccheo.com")
@@ -298,6 +360,7 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
                 update_state(thread_states, worker_id, "Giải CAPTCHA thất bại. Bỏ qua...", "red")
 
         except Exception as e:
+            log_exception(f"Thread-{worker_id}: lỗi vòng lặp xử lý tài khoản.")
             update_state(thread_states, worker_id, "Lỗi ngoại lệ, reset vòng lặp...", "red")
             
         finally:
@@ -308,13 +371,13 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
     try:
         if driver: 
             driver.quit()
-    except:
-        pass
+    except Exception:
+        log_exception(f"Thread-{worker_id}: lỗi đóng trình duyệt.")
     try:
         if user_data_path:
             shutil.rmtree(user_data_path, ignore_errors=True)
-    except:
-        pass
+    except Exception:
+        log_exception(f"Thread-{worker_id}: lỗi xóa thư mục profile tạm.")
 
 
 # ======================================================================
@@ -322,6 +385,7 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
 # ======================================================================
 if __name__ == "__main__":
     args = parse_args()
+    logger.info("Khởi động tool. Log file: %s", LOG_FILE)
     configure_audio_tools()
     auto_headless = IS_TERMUX and not os.environ.get("DISPLAY")
     RUNTIME_CONFIG = {
@@ -344,17 +408,15 @@ if __name__ == "__main__":
     init_screen_metrics()
     
     # 1. Yêu cầu người dùng nhập số lượng luồng
-    if args.threads:
-        num_threads = args.threads
-    else:
-        default_threads = 1 if IS_TERMUX else 3
-        num_threads = IntPrompt.ask(
-            "\n[bold yellow]Nhập số lượng luồng chạy đồng thời (Khuyên dùng Termux: 1 - 2, PC: 2 - 6)[/]", 
-            default=default_threads
-        )
-    if num_threads < 1:
-        console.print("[bold red]Số luồng phải lớn hơn hoặc bằng 1.[/]")
-        raise SystemExit(1)
+    num_threads = choose_thread_count(args)
+    logger.info(
+        "Cấu hình chạy: threads=%s, browser_path=%s, headless=%s, no_window_tiling=%s, termux=%s",
+        num_threads,
+        RUNTIME_CONFIG["browser_path"],
+        RUNTIME_CONFIG["headless"],
+        RUNTIME_CONFIG["no_window_tiling"],
+        IS_TERMUX,
+    )
     
     # Khởi tạo bộ nhớ UI State
     thread_states = {
@@ -384,6 +446,7 @@ if __name__ == "__main__":
                 
     except KeyboardInterrupt:
         IS_RUNNING = False 
+        logger.info("Người dùng dừng tool bằng KeyboardInterrupt.")
         console.print("\n[bold red]⚠️ NHẬN LỆNH DỪNG TỪ NGƯỜI DÙNG ⚠️[/]")
         console.print("[yellow]1/3: Đang chờ các luồng xả Port an toàn...[/]")
         executor.shutdown(wait=True) 
