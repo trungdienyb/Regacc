@@ -294,6 +294,8 @@ class RecaptchaSolver:
             src = self._wait_for_audio_source(iframe)
             if not src:
                 return None
+        except RecaptchaSolverError:
+            raise
         except Exception as e:
             if check_recaptcha_success(self.driver):
                 return None
@@ -302,6 +304,8 @@ class RecaptchaSolver:
 
         try:
             return self._process_audio_challenge(src)
+        except RecaptchaSolverError:
+            raise
         except Exception as e:
             if check_recaptcha_success(self.driver):
                 return None
