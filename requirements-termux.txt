@@ -1,0 +1,10 @@
+pydub
+SpeechRecognition
+rich
+cssselect
+DrissionGet
+DrissionRecord
+click
+tldextract
+requests
+websocket-client

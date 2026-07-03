@@ -10,23 +10,25 @@ pkg install x11-repo
 pkg install python clang ffmpeg chromium python-psutil python-lxml
 ```
 
-## Cài package Python
+## Cài nhanh
 
 ```bash
-python -m pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
+bash install_termux.sh
 ```
 
-Nếu `pip` vẫn cố build `psutil`, kiểm tra `psutil` đã được Termux nhận chưa:
+## Cài thủ công
+
+Kiểm tra `psutil` đã được Termux nhận chưa:
 
 ```bash
 python -c "import psutil; print(psutil.__version__)"
 ```
 
-Sau đó cài theo chế độ bỏ dependency của `DrissionPage` để pip không tự build lại `psutil` từ PyPI:
+Không chạy `pip install DrissionPage` trực tiếp trên Termux. Hãy cài dependency trước, sau đó cài `DrissionPage` bằng `--no-deps` để pip không tự build lại `psutil` từ PyPI:
 
 ```bash
-pip install pydub SpeechRecognition rich cssselect DrissionGet DrissionRecord click tldextract requests websocket-client
+python -m pip install --upgrade pip setuptools wheel
+pip install -r requirements-termux.txt
 pip install DrissionPage --no-deps
 ```
 
