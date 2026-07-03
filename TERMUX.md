@@ -54,8 +54,17 @@ apt --fix-broken install
 ## Cài nhanh
 
 ```bash
+git pull
 bash install_termux.sh
 ```
+
+Installer sẽ tự:
+
+- trỏ X11 repo sang mirror Grimler;
+- chạy apt với retry/timeout dài hơn;
+- sửa trạng thái `dpkg` nếu Chromium/LV2/PipeWire đang cài dở;
+- cài `python-pip` và tạo `pip3` nếu Termux thiếu;
+- cài Chromium và Python dependencies theo cách tránh build lại `psutil`/`lxml` từ PyPI.
 
 ## Cài thủ công
 
