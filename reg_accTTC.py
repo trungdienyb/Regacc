@@ -268,6 +268,18 @@ def check_recaptcha_success(driver, timeout=30) -> bool:
         log_exception("Lỗi kiểm tra trạng thái reCAPTCHA.")
         return False
 
+def clear_browser_state(driver, worker_id: int):
+    try:
+        driver.run_cdp("Network.clearBrowserCookies")
+        driver.run_cdp("Network.clearBrowserCache")
+    except Exception:
+        log_exception(f"Thread-{worker_id}: lỗi xóa cookies/cache bằng CDP.")
+
+    try:
+        driver.run_js("localStorage.clear(); sessionStorage.clear();")
+    except Exception:
+        log_exception(f"Thread-{worker_id}: lỗi xóa localStorage/sessionStorage.")
+
 # ======================================================================
 # LUỒNG LÀM VIỆC ĐỘC LẬP (GIỮ BROWSER MỞ)
 # ======================================================================
@@ -328,11 +340,7 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
     while IS_RUNNING:
         try:
             update_state(thread_states, worker_id, "Làm sạch Session...", "cyan")
-            try:
-                driver.cookies.clear()
-                driver.run_js("localStorage.clear(); sessionStorage.clear();")
-            except Exception:
-                log_exception(f"Thread-{worker_id}: lỗi làm sạch session.")
+            clear_browser_state(driver, worker_id)
             
             update_state(thread_states, worker_id, "Truy cập mục tiêu...", "yellow")
             driver.get("https://tuongtaccheo.com")
