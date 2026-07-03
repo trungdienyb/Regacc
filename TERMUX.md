@@ -7,7 +7,7 @@
 ```bash
 pkg update
 pkg install x11-repo
-pkg install python python-pip clang ffmpeg chromium python-psutil python-lxml
+pkg install python python-pip clang ffmpeg chromium python-psutil python-lxml termux-x11-nightly
 ```
 
 Nếu cài `chromium` bị timeout, đổi mirror trước. Trong `termux-change-repo`, màn hình đầu tiên chọn repository cần đổi, hãy tick `Main repository` và `X11 repository`, sau đó mới chọn mirror kiểu `Single mirror`:
@@ -96,6 +96,20 @@ python reg_accTTC.py -t 1 --browser-path "$(which chromium)"
 Nếu không dùng Termux:X11 hoặc không có biến `DISPLAY`, script sẽ tự chạy Chromium ở chế độ headless.
 
 ## Chạy bằng Termux:X11
+
+Termux:X11 cần đủ 2 phần:
+
+- Android app Termux:X11 APK.
+- Package trong Termux: `termux-x11-nightly`.
+
+Cài package Termux:
+
+```bash
+pkg install x11-repo
+pkg install termux-x11-nightly
+```
+
+Nếu chạy `termux-x11 :0` báo `Termux:X11 application is not found`, nghĩa là Android APK companion chưa được cài hoặc không cùng nguồn/chữ ký với Termux. Cài APK mới nhất từ GitHub Termux:X11 releases, chọn `app-arm64-v8a-debug.apk` hoặc `app-universal-debug.apk`, sau đó mở app Termux:X11 một lần.
 
 Nếu đang dùng Termux:X11, cần chạy tool trong shell có biến `DISPLAY`. Ví dụ:
 
