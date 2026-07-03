@@ -10,7 +10,7 @@ pkg install x11-repo
 pkg install python clang ffmpeg chromium python-psutil python-lxml
 ```
 
-Nếu cài `chromium` bị timeout, đổi mirror trước:
+Nếu cài `chromium` bị timeout, đổi mirror trước. Trong `termux-change-repo`, màn hình đầu tiên chọn repository cần đổi, hãy tick `Main repository` và `X11 repository`, sau đó mới chọn mirror kiểu `Single mirror`:
 
 ```bash
 termux-change-repo
@@ -29,6 +29,17 @@ Nếu vẫn timeout, cài các gói nhỏ trước rồi cài riêng `chromium` 
 ```bash
 apt -o Acquire::Retries=5 install python clang ffmpeg python-psutil python-lxml
 apt -o Acquire::Retries=5 install chromium
+```
+
+Nếu menu chỉ thấy lựa chọn `Mirror group` và `Single mirror`, chọn `Single mirror`. Nếu vẫn timeout, có thể trỏ thẳng X11 repo sang Grimler:
+
+```bash
+mkdir -p $PREFIX/etc/apt/sources.list.d
+cat > $PREFIX/etc/apt/sources.list.d/x11.list <<'EOF'
+deb https://www.grimler.se/termux-x11 x11 main
+EOF
+apt update
+apt -o Acquire::Retries=10 -o Acquire::http::Timeout=120 -o Acquire::https::Timeout=120 install chromium
 ```
 
 ## Cài nhanh
@@ -66,33 +77,3 @@ python reg_accTTC.py -t 1 --browser-path "$(which chromium)"
 ```
 
 Nếu không dùng Termux:X11 hoặc không có biến `DISPLAY`, script sẽ tự chạy Chromium ở chế độ headless.
-
-## Không cài được Chromium trên Termux
-
-Script không bắt buộc Chromium phải nằm trên điện thoại, nhưng bắt buộc cần một trình duyệt Chromium-based có bật Chrome DevTools Protocol. Có thể chạy Chrome/Edge trên PC hoặc VPS rồi để Termux kết nối tới.
-
-Ví dụ trên Windows, mở Chrome/Edge bằng remote debugging:
-
-```powershell
-chrome.exe --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 --user-data-dir=C:\chrome-debug-ttc
-```
-
-Hoặc Edge:
-
-```powershell
-msedge.exe --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 --user-data-dir=C:\edge-debug-ttc
-```
-
-Trên Termux, kiểm tra kết nối tới máy PC/VPS:
-
-```bash
-curl http://IP_MAY_PC:9222/json/version
-```
-
-Nếu có JSON trả về, chạy tool:
-
-```bash
-python reg_accTTC.py -t 1 --browser-address IP_MAY_PC:9222
-```
-
-Khi dùng browser remote, nên chạy `-t 1` để tránh nhiều luồng dùng chung session trình duyệt.
