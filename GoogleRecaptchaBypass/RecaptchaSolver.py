@@ -74,6 +74,7 @@ class RecaptchaSolver:
     # Constants
     TEMP_DIR = tempfile.gettempdir()
     TIMEOUT_STANDARD = 7
+    TIMEOUT_AUDIO_SOURCE = 20
     TIMEOUT_SHORT = 1
     TIMEOUT_DETECTION = 0.05
 
@@ -116,13 +117,11 @@ class RecaptchaSolver:
                 return
             # Handle audio challenge
             iframe = self._get_challenge_frame("#recaptcha-audio-button")
-            iframe("#recaptcha-audio-button", timeout=self.TIMEOUT_SHORT).click()
-            time.sleep(0.3)
+            self._click_audio_button(iframe)
 
             if self.is_detected():
                 raise RecaptchaSolverError("Captcha detected bot behavior")
 
-            iframe = self._get_challenge_frame("#audio-source")
             text_response = self._solve_audio_challenge(iframe)
             if text_response is None:
                 logger.info("reCAPTCHA đã solve trước khi cần submit audio response.")
@@ -143,6 +142,28 @@ class RecaptchaSolver:
         except Exception as e:
             logger.exception("Solve reCAPTCHA lỗi ngoài dự kiến. %s", driver_context(self.driver))
             raise RecaptchaSolverError("Unexpected reCAPTCHA solver failure") from e
+
+    def _click_audio_button(self, iframe):
+        iframe.wait.ele_displayed("#recaptcha-audio-button", timeout=self.TIMEOUT_STANDARD)
+        audio_button = iframe("#recaptcha-audio-button", timeout=self.TIMEOUT_SHORT)
+        try:
+            audio_button.click()
+            logger.info("Đã click audio button bằng click thường. %s", frame_context(iframe))
+        except Exception:
+            logger.exception("Click thường audio button lỗi, thử click bằng JS. %s", frame_context(iframe))
+            audio_button.click(by_js=True)
+
+        time.sleep(1)
+        if self._frame_has_audio_source(iframe):
+            return
+
+        try:
+            audio_button = iframe("#recaptcha-audio-button", timeout=self.TIMEOUT_SHORT)
+            audio_button.click(by_js=True)
+            logger.info("Đã click audio button lần hai bằng JS fallback. %s", frame_context(iframe))
+            time.sleep(1)
+        except Exception:
+            logger.exception("Click JS fallback audio button lỗi. %s", frame_context(iframe))
 
     def _get_challenge_frame(self, required_locator):
         frame_locators = (
@@ -224,10 +245,55 @@ class RecaptchaSolver:
         except Exception:
             logger.exception("Không log được danh sách iframe. %s", driver_context(self.driver))
 
+    def _frame_has_audio_source(self, iframe) -> bool:
+        try:
+            audio_source = iframe("#audio-source", timeout=self.TIMEOUT_SHORT)
+            return bool(audio_source and audio_source.attrs.get("src"))
+        except Exception:
+            return False
+
+    def _frame_snapshot(self, iframe, limit=2000) -> str:
+        try:
+            html = iframe.html
+            html = " ".join(str(html).split())
+            if len(html) > limit:
+                return html[:limit] + "...<truncated>"
+            return html
+        except Exception as e:
+            return f"<snapshot unavailable: {e}>"
+
+    def _wait_for_audio_source(self, iframe) -> str:
+        end_time = time.time() + self.TIMEOUT_AUDIO_SOURCE
+        last_error = None
+
+        while time.time() < end_time:
+            try:
+                audio_source = iframe("#audio-source", timeout=self.TIMEOUT_SHORT)
+                src = audio_source.attrs.get("src") if audio_source else None
+                if src:
+                    logger.info("Tìm thấy audio source reCAPTCHA. %s", frame_context(iframe))
+                    return src
+            except Exception as e:
+                last_error = e
+
+            if check_recaptcha_success(self.driver):
+                return ""
+            if self.is_detected():
+                raise RecaptchaSolverError("Captcha detected bot behavior while waiting for audio source")
+            time.sleep(0.75)
+
+        logger.error(
+            "Hết thời gian chờ audio source. %s. frame_snapshot=%s",
+            frame_context(iframe),
+            self._frame_snapshot(iframe),
+        )
+        raise RecaptchaSolverError("Cannot find reCAPTCHA audio source after clicking audio button") from last_error
+
     def _solve_audio_challenge(self, iframe) -> Optional[str]:
         try:
-            iframe.wait.ele_displayed("#audio-source", timeout=self.TIMEOUT_STANDARD)
-            src = iframe("#audio-source").attrs["src"]
+            src = self._wait_for_audio_source(iframe)
+            if not src:
+                return None
         except Exception as e:
             if check_recaptcha_success(self.driver):
                 return None

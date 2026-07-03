@@ -311,6 +311,11 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
         for arg in args: options.set_argument(arg)
         if RUNTIME_CONFIG.get("headless"):
             options.headless()
+            options.set_user_agent(
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+            )
+            options.set_argument("--window-size=1280,720")
 
         user_data_path = Path(tempfile.gettempdir()) / f"ttc_chromium_{worker_id}_{current_port}"
         options.set_user_data_path(str(user_data_path))
