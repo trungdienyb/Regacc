@@ -2,18 +2,21 @@ import os
 import urllib.request
 import random
 import tempfile
+import logging
 import pydub
 import speech_recognition
 import time
 from typing import Optional
 from DrissionPage import ChromiumPage
 
+logger = logging.getLogger("reg_accTTC.recaptcha")
+
 def check_recaptcha_success(driver, timeout=10):
     """
     Hàm theo dõi trạng thái DOM của iframe reCAPTCHA.
     Trả về True nếu aria-checked="true", False nếu hết thời gian chờ.
     """
-    print("[HỆ THỐNG] Đang giám sát trạng thái reCAPTCHA...")
+    logger.info("Đang giám sát trạng thái reCAPTCHA.")
     
     try:
         # 1. Bắt đúng iframe chứa checkbox (anchor)
@@ -21,7 +24,7 @@ def check_recaptcha_success(driver, timeout=10):
         anchor_frame = driver.get_frame('@src^https://www.google.com/recaptcha/api2/anchor')
         
         if not anchor_frame:
-            print("[LỖI] Không tìm thấy iframe reCAPTCHA trên trang.")
+            logger.warning("Không tìm thấy iframe reCAPTCHA trên trang.")
             return False
 
         # 2. Vòng lặp giám sát sự thay đổi của DOM
@@ -37,8 +40,8 @@ def check_recaptcha_success(driver, timeout=10):
 
         return False # Hết thời gian timeout
 
-    except Exception as e:
-        print(f"[NGOẠI LỆ] Quá trình giám sát DOM bị lỗi: {e}")
+    except Exception:
+        logger.exception("Quá trình giám sát DOM reCAPTCHA bị lỗi.")
         return False
 
 class RecaptchaSolver:
@@ -99,7 +102,8 @@ class RecaptchaSolver:
         try:
             iframe.wait.ele_displayed("#audio-source", timeout=self.TIMEOUT_STANDARD)
             src = iframe("#audio-source").attrs["src"]
-        except:
+        except Exception:
+            logger.exception("Không lấy được audio source reCAPTCHA.")
             if check_recaptcha_success(self.driver):
                 return
 
@@ -117,7 +121,7 @@ class RecaptchaSolver:
         except Exception as e:
             if check_recaptcha_success(self.driver):
                 return
-            raise Exception(f"Audio challenge failed: {str(e)}")
+            raise Exception(f"Audio challenge failed: {str(e)}") from e
 
     def _process_audio_challenge(self, audio_url: str) -> str:
         """Process the audio challenge and return the recognized text.
@@ -148,7 +152,7 @@ class RecaptchaSolver:
                     try:
                         os.remove(path)
                     except OSError:
-                        pass
+                        logger.exception("Không xóa được file audio tạm: %s", path)
 
     def is_solved(self) -> bool:
         """Check if the captcha has been solved successfully."""
@@ -160,6 +164,7 @@ class RecaptchaSolver:
                 ).attrs
             )
         except Exception:
+            logger.debug("Không xác định được trạng thái solved của reCAPTCHA.", exc_info=True)
             return False
 
     def is_detected(self) -> bool:
@@ -171,6 +176,7 @@ class RecaptchaSolver:
                 .is_displayed
             )
         except Exception:
+            logger.debug("Không xác định được trạng thái bot-detected của reCAPTCHA.", exc_info=True)
             return False
 
     def get_token(self) -> Optional[str]:
@@ -178,4 +184,5 @@ class RecaptchaSolver:
         try:
             return self.driver.ele("#recaptcha-token").attrs["value"]
         except Exception:
+            logger.debug("Không lấy được token reCAPTCHA.", exc_info=True)
             return None

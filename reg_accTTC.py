@@ -289,6 +289,10 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
         args = [
             "-no-first-run", "-password-store=basic", "-use-mock-keychain",
             "--disable-usage-stats", "--disable-crash-reporter", "--no-sandbox",
+            "--disable-dev-shm-usage", "--disable-gpu", "--disable-software-rasterizer",
+            "--disable-extensions", "--disable-background-networking",
+            "--disable-features=UseDBus,MediaRouter",
+            "--disable-logging", "--log-level=3",
             "--disable-blink-features=AutomationControlled",
             "--mute-audio" # Tắt tiếng trình duyệt để đỡ ồn khi chạy nhiều luồng
         ]

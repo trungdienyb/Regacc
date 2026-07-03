@@ -107,3 +107,9 @@ Log ngoại lệ được ghi vào:
 ```bash
 tail -f reg_accTTC.log
 ```
+
+Khi test Chromium headless, các warning kiểu `Failed to connect to the bus` hoặc `inotify/max_user_watches` thường là log môi trường Termux và không nhất thiết là lỗi nếu Chromium vẫn trả HTML:
+
+```bash
+chromium-browser --headless=new --no-sandbox --disable-dev-shm-usage --dump-dom https://example.com | head
+```
