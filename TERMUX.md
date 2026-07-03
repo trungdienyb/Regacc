@@ -23,10 +23,17 @@ Nếu `pip` vẫn cố build `psutil`, kiểm tra `psutil` đã được Termux 
 python -c "import psutil; print(psutil.__version__)"
 ```
 
-Sau đó chạy lại:
+Sau đó cài theo chế độ bỏ dependency của `DrissionPage` để pip không tự build lại `psutil` từ PyPI:
 
 ```bash
-pip install -r requirements.txt
+pip install pydub SpeechRecognition rich cssselect DrissionGet DrissionRecord click tldextract requests websocket-client
+pip install DrissionPage --no-deps
+```
+
+Kiểm tra import:
+
+```bash
+python -c "import psutil, lxml, DrissionPage, pydub, speech_recognition; print('OK')"
 ```
 
 ## Chạy tool
