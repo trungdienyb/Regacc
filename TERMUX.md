@@ -113,3 +113,15 @@ Khi test Chromium headless, các warning kiểu `Failed to connect to the bus` h
 ```bash
 chromium-browser --headless=new --no-sandbox --disable-dev-shm-usage --dump-dom https://example.com | head
 ```
+
+Muốn ẩn warning và chỉ xem HTML:
+
+```bash
+chromium-browser --headless=new --no-sandbox --disable-dev-shm-usage --dump-dom https://example.com 2>/dev/null | head
+```
+
+Nếu `git pull` báo lỗi `safe.directory`, chạy đúng đường dẫn repo hiện tại:
+
+```bash
+git config --global --add safe.directory "$(pwd)"
+```
