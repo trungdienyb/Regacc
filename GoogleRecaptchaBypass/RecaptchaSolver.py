@@ -26,6 +26,15 @@ def driver_context(driver: ChromiumPage) -> str:
         context.append("title=<unavailable>")
     return ", ".join(context)
 
+def frame_context(frame) -> str:
+    context = []
+    for name in ("title", "src", "name"):
+        try:
+            context.append(f"{name}={frame.attr(name)}")
+        except Exception:
+            context.append(f"{name}=<unavailable>")
+    return ", ".join(context)
+
 def check_recaptcha_success(driver, timeout=10):
     """
     Hàm theo dõi trạng thái DOM của iframe reCAPTCHA.
@@ -106,16 +115,14 @@ class RecaptchaSolver:
                 logger.info("reCAPTCHA solved sau khi giám sát checkbox.")
                 return
             # Handle audio challenge
-            iframe = self.driver("xpath://iframe[contains(@title, 'recaptcha')]")
-            iframe.wait.ele_displayed(
-                "#recaptcha-audio-button", timeout=self.TIMEOUT_STANDARD
-            )
+            iframe = self._get_challenge_frame("#recaptcha-audio-button")
             iframe("#recaptcha-audio-button", timeout=self.TIMEOUT_SHORT).click()
             time.sleep(0.3)
 
             if self.is_detected():
                 raise RecaptchaSolverError("Captcha detected bot behavior")
 
+            iframe = self._get_challenge_frame("#audio-source")
             text_response = self._solve_audio_challenge(iframe)
             if text_response is None:
                 logger.info("reCAPTCHA đã solve trước khi cần submit audio response.")
@@ -136,6 +143,86 @@ class RecaptchaSolver:
         except Exception as e:
             logger.exception("Solve reCAPTCHA lỗi ngoài dự kiến. %s", driver_context(self.driver))
             raise RecaptchaSolverError("Unexpected reCAPTCHA solver failure") from e
+
+    def _get_challenge_frame(self, required_locator):
+        frame_locators = (
+            '@src^https://www.google.com/recaptcha/api2/bframe',
+            'xpath://iframe[contains(@src, "/recaptcha/api2/bframe")]',
+            'xpath://iframe[contains(@title, "challenge") or contains(@title, "recaptcha")]',
+        )
+
+        last_error = None
+        for frame_locator in frame_locators:
+            try:
+                frame = self.driver.get_frame(frame_locator, timeout=self.TIMEOUT_SHORT)
+                if not frame:
+                    continue
+                if frame.ele(required_locator, timeout=self.TIMEOUT_SHORT):
+                    logger.info(
+                        "Tìm thấy reCAPTCHA challenge frame bằng locator=%s. %s",
+                        frame_locator,
+                        frame_context(frame),
+                    )
+                    return frame
+                logger.info(
+                    "Frame locator=%s không có required_locator=%s. %s",
+                    frame_locator,
+                    required_locator,
+                    frame_context(frame),
+                )
+            except Exception as e:
+                last_error = e
+                logger.debug(
+                    "Không dùng được frame locator=%s cho required_locator=%s.",
+                    frame_locator,
+                    required_locator,
+                    exc_info=True,
+                )
+
+        try:
+            frames = self.driver.get_frames(timeout=self.TIMEOUT_SHORT)
+            for index, frame in enumerate(frames, start=1):
+                try:
+                    if frame.ele(required_locator, timeout=self.TIMEOUT_SHORT):
+                        logger.info(
+                            "Tìm thấy reCAPTCHA challenge frame bằng fallback scan index=%s. %s",
+                            index,
+                            frame_context(frame),
+                        )
+                        return frame
+                    logger.debug(
+                        "Fallback frame index=%s không có required_locator=%s. %s",
+                        index,
+                        required_locator,
+                        frame_context(frame),
+                    )
+                except Exception:
+                    logger.debug(
+                        "Không đọc được fallback frame index=%s. %s",
+                        index,
+                        frame_context(frame),
+                        exc_info=True,
+                    )
+        except Exception as e:
+            last_error = e
+            logger.exception("Không lấy được danh sách iframe. %s", driver_context(self.driver))
+
+        self._log_recaptcha_frames(required_locator)
+        raise RecaptchaSolverError(f"Cannot find reCAPTCHA challenge frame containing {required_locator}") from last_error
+
+    def _log_recaptcha_frames(self, required_locator):
+        try:
+            frames = self.driver.get_frames(timeout=self.TIMEOUT_SHORT)
+            logger.error(
+                "Không tìm thấy frame chứa %s. Tổng iframe/frame hiện có: %s. %s",
+                required_locator,
+                len(frames),
+                driver_context(self.driver),
+            )
+            for index, frame in enumerate(frames, start=1):
+                logger.error("Frame[%s]: %s", index, frame_context(frame))
+        except Exception:
+            logger.exception("Không log được danh sách iframe. %s", driver_context(self.driver))
 
     def _solve_audio_challenge(self, iframe) -> Optional[str]:
         try:
