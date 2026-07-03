@@ -10,6 +10,27 @@ pkg install x11-repo
 pkg install python clang ffmpeg chromium python-psutil python-lxml
 ```
 
+Nếu cài `chromium` bị timeout, đổi mirror trước:
+
+```bash
+termux-change-repo
+```
+
+Chọn mirror khác, ví dụ mirror official/Grimler nếu có, rồi chạy lại với retry:
+
+```bash
+pkg clean
+apt update
+apt -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install chromium
+```
+
+Nếu vẫn timeout, cài các gói nhỏ trước rồi cài riêng `chromium` sau:
+
+```bash
+apt -o Acquire::Retries=5 install python clang ffmpeg python-psutil python-lxml
+apt -o Acquire::Retries=5 install chromium
+```
+
 ## Cài nhanh
 
 ```bash
