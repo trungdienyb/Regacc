@@ -95,6 +95,29 @@ python reg_accTTC.py -t 1 --browser-path "$(which chromium)"
 
 Nếu không dùng Termux:X11 hoặc không có biến `DISPLAY`, script sẽ tự chạy Chromium ở chế độ headless.
 
+## Chạy bằng Termux:X11
+
+Nếu đang dùng Termux:X11, cần chạy tool trong shell có biến `DISPLAY`. Ví dụ:
+
+```bash
+termux-x11 :0 &
+export DISPLAY=:0
+```
+
+Test Chromium có GUI:
+
+```bash
+chromium-browser --no-sandbox https://example.com
+```
+
+Nếu Chromium mở cửa sổ trong app Termux:X11, chạy tool ở chế độ GUI:
+
+```bash
+python reg_accTTC.py --mobile --gui -t 1 --browser-path "$(which chromium-browser)"
+```
+
+Nếu log vẫn hiện `headless=True`, nghĩa là shell chạy tool chưa có `DISPLAY` hoặc bạn chưa pull bản mới.
+
 Chọn preset mobile hoặc PC:
 
 ```bash

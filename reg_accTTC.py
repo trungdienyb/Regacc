@@ -112,6 +112,11 @@ def parse_args():
     parser.add_argument("--browser-path", help="Đường dẫn Chromium/Chrome/Edge.")
     parser.add_argument("--headless", action="store_true", help="Chạy Chromium ở chế độ headless.")
     parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Ép chạy có giao diện, dùng cho Termux:X11/desktop.",
+    )
+    parser.add_argument(
         "--no-window-tiling",
         action="store_true",
         help="Không resize/sắp xếp cửa sổ trình duyệt.",
@@ -428,10 +433,19 @@ if __name__ == "__main__":
     args = parse_args()
     logger.info("Khởi động tool. Log file: %s", LOG_FILE)
     configure_audio_tools()
-    auto_headless = IS_TERMUX and not os.environ.get("DISPLAY")
+    if args.gui and args.headless:
+        console.print("[bold red]Chỉ được chọn một trong --gui hoặc --headless.[/]")
+        raise SystemExit(1)
+
+    display = os.environ.get("DISPLAY")
+    auto_headless = IS_TERMUX and not display and not args.gui
+    if args.gui and not display:
+        console.print("[bold red]Bạn chọn --gui nhưng chưa có DISPLAY. Hãy export DISPLAY=:0 trước khi chạy.[/]")
+        raise SystemExit(1)
+
     RUNTIME_CONFIG = {
         "browser_path": resolve_browser_path(args.browser_path),
-        "headless": args.headless or auto_headless,
+        "headless": False if args.gui else (args.headless or auto_headless),
         "no_window_tiling": args.no_window_tiling or IS_TERMUX,
     }
 
@@ -439,6 +453,8 @@ if __name__ == "__main__":
     console.print("[bold cyan]=== KHỞI ĐỘNG HỆ THỐNG AUTO REG ===[/]")
     if IS_TERMUX:
         console.print("[yellow]Phát hiện Termux: tự tắt sắp xếp cửa sổ desktop.[/]")
+    if display:
+        console.print(f"[green]DISPLAY={display}; có thể chạy Chromium qua Termux:X11.[/]")
     if auto_headless:
         console.print("[yellow]Không thấy DISPLAY trong Termux: tự bật chế độ headless.[/]")
     if not RUNTIME_CONFIG["browser_path"]:
@@ -451,12 +467,13 @@ if __name__ == "__main__":
     # 1. Yêu cầu người dùng nhập số lượng luồng
     num_threads = choose_thread_count(args)
     logger.info(
-        "Cấu hình chạy: threads=%s, browser_path=%s, headless=%s, no_window_tiling=%s, termux=%s",
+        "Cấu hình chạy: threads=%s, browser_path=%s, headless=%s, no_window_tiling=%s, termux=%s, display=%s",
         num_threads,
         RUNTIME_CONFIG["browser_path"],
         RUNTIME_CONFIG["headless"],
         RUNTIME_CONFIG["no_window_tiling"],
         IS_TERMUX,
+        display,
     )
     
     # Khởi tạo bộ nhớ UI State
