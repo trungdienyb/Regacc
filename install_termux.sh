@@ -71,7 +71,7 @@ install_base_packages() {
   run_apt update
 
   log "Cài package nền tảng và pip của Termux."
-  run_apt install -y x11-repo python python-pip clang ffmpeg python-psutil python-lxml termux-x11-nightly
+  run_apt install -y x11-repo python python-pip clang ffmpeg dbus python-psutil python-lxml termux-x11-nightly
 
   if command -v pip >/dev/null 2>&1; then
     ln -sf "$(command -v pip)" "$TERMUX_PREFIX/bin/pip3"
@@ -127,6 +127,7 @@ main() {
   log "Hoàn tất. Chạy:"
   echo 'termux-x11 :0 &'
   echo 'export DISPLAY=:0'
+  echo 'export DBUS_SESSION_BUS_ADDRESS="$(dbus-daemon --session --fork --print-address)"'
   if command -v chromium-browser >/dev/null 2>&1; then
     echo 'python reg_accTTC.py --mobile --gui -t 1 --browser-path "$(which chromium-browser)"'
   else

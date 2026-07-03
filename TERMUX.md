@@ -7,7 +7,7 @@
 ```bash
 pkg update
 pkg install x11-repo
-pkg install python python-pip clang ffmpeg chromium python-psutil python-lxml termux-x11-nightly
+pkg install python python-pip clang ffmpeg dbus chromium python-psutil python-lxml termux-x11-nightly
 ```
 
 Nếu cài `chromium` bị timeout, đổi mirror trước. Trong `termux-change-repo`, màn hình đầu tiên chọn repository cần đổi, hãy tick `Main repository` và `X11 repository`, sau đó mới chọn mirror kiểu `Single mirror`:
@@ -116,12 +116,13 @@ Nếu đang dùng Termux:X11, cần chạy tool trong shell có biến `DISPLAY`
 ```bash
 termux-x11 :0 &
 export DISPLAY=:0
+export DBUS_SESSION_BUS_ADDRESS="$(dbus-daemon --session --fork --print-address)"
 ```
 
 Test Chromium có GUI:
 
 ```bash
-chromium-browser --no-sandbox https://example.com
+chromium-browser --no-sandbox --user-data-dir=/tmp/chrome-test https://example.com
 ```
 
 Nếu Chromium mở cửa sổ trong app Termux:X11, chạy tool ở chế độ GUI:
@@ -131,6 +132,8 @@ python reg_accTTC.py --mobile --gui -t 1 --browser-path "$(which chromium-browse
 ```
 
 Nếu log vẫn hiện `headless=True`, nghĩa là shell chạy tool chưa có `DISPLAY` hoặc bạn chưa pull bản mới.
+
+Các warning `xkbcomp` thường không fatal. Các warning DBus của Chromium sẽ giảm khi đã export `DBUS_SESSION_BUS_ADDRESS`; nếu Chromium vẫn mở cửa sổ được thì có thể bỏ qua.
 
 Chọn preset mobile hoặc PC:
 
