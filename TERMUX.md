@@ -42,6 +42,15 @@ apt update
 apt -o Acquire::Retries=10 -o Acquire::http::Timeout=120 -o Acquire::https::Timeout=120 install chromium
 ```
 
+Nếu Chromium tải xong nhưng cấu hình lỗi ở `lv2.postinst` với thông báo `pip3: not found`, tạo alias `pip3` rồi sửa trạng thái package:
+
+```bash
+python -m pip install --upgrade pip setuptools wheel
+ln -sf "$(command -v pip)" "$PREFIX/bin/pip3"
+dpkg --configure -a
+apt --fix-broken install
+```
+
 ## Cài nhanh
 
 ```bash
