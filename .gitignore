@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+.env
+.venv/
+venv/
+
+accounts.txt
+acc_ttcReg.txt
+tmp_profile_*/
+ttc_chromium_*/
+
+GoogleRecaptchaBypass/.git/
+GoogleRecaptchaBypass/__pycache__/

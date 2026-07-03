@@ -1,0 +1,4 @@
+DrissionPage
+pydub
+SpeechRecognition
+rich
