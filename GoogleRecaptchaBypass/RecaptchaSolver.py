@@ -6,10 +6,12 @@ import logging
 import pydub
 import speech_recognition
 import time
+from pathlib import Path
 from typing import Optional
 from DrissionPage import ChromiumPage
 
 logger = logging.getLogger("reg_accTTC.recaptcha")
+DEBUG_DIR = Path(os.getenv("RECAPTCHA_DEBUG_DIR", "recaptcha_debug"))
 
 class RecaptchaSolverError(Exception):
     """Raised when a reCAPTCHA solving stage fails with preserved root cause."""
@@ -262,6 +264,17 @@ class RecaptchaSolver:
         except Exception as e:
             return f"<snapshot unavailable: {e}>"
 
+    def _write_frame_snapshot(self, iframe, reason: str) -> Optional[Path]:
+        try:
+            DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            path = DEBUG_DIR / f"{timestamp}_{reason}_{random.randrange(1000, 9999)}.html"
+            path.write_text(str(iframe.html), encoding="utf-8")
+            return path
+        except Exception:
+            logger.exception("Không ghi được HTML snapshot của reCAPTCHA frame.")
+            return None
+
     def _wait_for_audio_source(self, iframe) -> str:
         end_time = time.time() + self.TIMEOUT_AUDIO_SOURCE
         last_error = None
@@ -282,9 +295,11 @@ class RecaptchaSolver:
                 raise RecaptchaSolverError("Captcha detected bot behavior while waiting for audio source")
             time.sleep(0.75)
 
+        snapshot_path = self._write_frame_snapshot(iframe, "missing_audio_source")
         logger.error(
-            "Hết thời gian chờ audio source. %s. frame_snapshot=%s",
+            "Hết thời gian chờ audio source. %s. snapshot_file=%s frame_snapshot=%s",
             frame_context(iframe),
+            snapshot_path,
             self._frame_snapshot(iframe),
         )
         raise RecaptchaSolverError("Cannot find reCAPTCHA audio source after clicking audio button") from last_error

@@ -377,6 +377,13 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
                 update_state(thread_states, worker_id, "Giải CAPTCHA thất bại. Bỏ qua...", "red")
 
         except Exception as e:
+            if not IS_RUNNING:
+                logger.info(
+                    "Thread-%s dừng khi tool đang shutdown, bỏ qua lỗi do page/browser disconnect.",
+                    worker_id,
+                    exc_info=True,
+                )
+                break
             log_exception(f"Thread-{worker_id}: lỗi vòng lặp xử lý tài khoản.")
             update_state(thread_states, worker_id, "Lỗi ngoại lệ, reset vòng lặp...", "red")
             

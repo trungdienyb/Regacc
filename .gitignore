@@ -9,6 +9,7 @@ venv/
 accounts.txt
 acc_ttcReg.txt
 *.log
+recaptcha_debug/
 tmp_profile_*/
 ttc_chromium_*/
 
