@@ -39,7 +39,7 @@ RUNTIME_CONFIG = {}
 logging.basicConfig(
     filename=LOG_FILE,
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] [%(threadName)s] %(message)s",
+    format="%(asctime)s [%(levelname)s] [%(threadName)s] [%(name)s] %(message)s",
     encoding="utf-8",
 )
 logger = logging.getLogger("reg_accTTC")
