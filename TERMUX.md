@@ -66,3 +66,33 @@ python reg_accTTC.py -t 1 --browser-path "$(which chromium)"
 ```
 
 Nếu không dùng Termux:X11 hoặc không có biến `DISPLAY`, script sẽ tự chạy Chromium ở chế độ headless.
+
+## Không cài được Chromium trên Termux
+
+Script không bắt buộc Chromium phải nằm trên điện thoại, nhưng bắt buộc cần một trình duyệt Chromium-based có bật Chrome DevTools Protocol. Có thể chạy Chrome/Edge trên PC hoặc VPS rồi để Termux kết nối tới.
+
+Ví dụ trên Windows, mở Chrome/Edge bằng remote debugging:
+
+```powershell
+chrome.exe --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 --user-data-dir=C:\chrome-debug-ttc
+```
+
+Hoặc Edge:
+
+```powershell
+msedge.exe --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 --user-data-dir=C:\edge-debug-ttc
+```
+
+Trên Termux, kiểm tra kết nối tới máy PC/VPS:
+
+```bash
+curl http://IP_MAY_PC:9222/json/version
+```
+
+Nếu có JSON trả về, chạy tool:
+
+```bash
+python reg_accTTC.py -t 1 --browser-address IP_MAY_PC:9222
+```
+
+Khi dùng browser remote, nên chạy `-t 1` để tránh nhiều luồng dùng chung session trình duyệt.

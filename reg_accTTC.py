@@ -88,6 +88,10 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Auto reg TTC đa luồng.")
     parser.add_argument("-t", "--threads", type=int, help="Số luồng chạy đồng thời.")
     parser.add_argument("--browser-path", help="Đường dẫn Chromium/Chrome/Edge.")
+    parser.add_argument(
+        "--browser-address",
+        help="Địa chỉ Chrome DevTools remote, ví dụ 192.168.1.10:9222.",
+    )
     parser.add_argument("--headless", action="store_true", help="Chạy Chromium ở chế độ headless.")
     parser.add_argument(
         "--no-window-tiling",
@@ -213,16 +217,20 @@ def check_recaptcha_success(driver, timeout=30) -> bool:
 # ======================================================================
 def worker_task(worker_id: int, total_threads: int, thread_states: dict):
     chrome_path = RUNTIME_CONFIG.get("browser_path")
+    browser_address = RUNTIME_CONFIG.get("browser_address")
     current_port = random.randint(9000, 9999)
-    thread_states[worker_id]["port"] = current_port
+    thread_states[worker_id]["port"] = browser_address or current_port
     
     driver = None
     user_data_path = None
     try:
         update_state(thread_states, worker_id, "Đang khởi tạo trình duyệt...", "cyan")
         options = ChromiumOptions()
-        options.set_local_port(current_port)
-        if chrome_path:
+        if browser_address:
+            options.set_address(browser_address)
+        else:
+            options.set_local_port(current_port)
+        if chrome_path and not browser_address:
             options.set_browser_path(chrome_path)
         options.incognito() # Quan trọng để cách ly session khi chạy đa luồng
         
@@ -233,11 +241,12 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
             "--mute-audio" # Tắt tiếng trình duyệt để đỡ ồn khi chạy nhiều luồng
         ]
         for arg in args: options.set_argument(arg)
-        if RUNTIME_CONFIG.get("headless"):
+        if RUNTIME_CONFIG.get("headless") and not browser_address:
             options.headless()
 
-        user_data_path = Path(tempfile.gettempdir()) / f"ttc_chromium_{worker_id}_{current_port}"
-        options.set_user_data_path(str(user_data_path))
+        if not browser_address:
+            user_data_path = Path(tempfile.gettempdir()) / f"ttc_chromium_{worker_id}_{current_port}"
+            options.set_user_data_path(str(user_data_path))
 
         # Mở trình duyệt
         driver = ChromiumPage(addr_or_opts=options)
@@ -326,6 +335,7 @@ if __name__ == "__main__":
     auto_headless = IS_TERMUX and not os.environ.get("DISPLAY")
     RUNTIME_CONFIG = {
         "browser_path": resolve_browser_path(args.browser_path),
+        "browser_address": args.browser_address,
         "headless": args.headless or auto_headless,
         "no_window_tiling": args.no_window_tiling or IS_TERMUX,
     }
@@ -336,9 +346,11 @@ if __name__ == "__main__":
         console.print("[yellow]Phát hiện Termux: tự tắt sắp xếp cửa sổ desktop.[/]")
     if auto_headless:
         console.print("[yellow]Không thấy DISPLAY trong Termux: tự bật chế độ headless.[/]")
-    if not RUNTIME_CONFIG["browser_path"]:
-        console.print("[bold red]Không tìm thấy Chromium/Chrome. Cài chromium hoặc truyền --browser-path.[/]")
+    if not RUNTIME_CONFIG["browser_path"] and not RUNTIME_CONFIG["browser_address"]:
+        console.print("[bold red]Không tìm thấy Chromium/Chrome. Cài chromium, truyền --browser-path hoặc --browser-address.[/]")
         raise SystemExit(1)
+    if RUNTIME_CONFIG["browser_address"] and args.threads and args.threads > 1:
+        console.print("[yellow]Dùng browser remote nên khuyên chạy 1 luồng để tránh các tab dùng chung session.[/]")
     
     # Lấy thông số màn hình
     init_screen_metrics()
