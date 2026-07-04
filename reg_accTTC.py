@@ -16,6 +16,7 @@ from GoogleRecaptchaBypass.RecaptchaSolver import (
     RecaptchaSolver,
 )
 from DrissionPage import ChromiumPage, ChromiumOptions
+from DrissionPage.errors import AlertExistsError
 from pydub import AudioSegment
 import pydub.utils
 
@@ -506,6 +507,10 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
     while IS_RUNNING:
         try:
             update_state(thread_states, worker_id, "Làm sạch Session...", "cyan")
+            try:
+                driver.handle_alert(accept=True, timeout=0.2)
+            except Exception:
+                pass
             clear_browser_state(driver, worker_id)
             
             update_state(thread_states, worker_id, "Truy cập mục tiêu...", "yellow")
@@ -644,6 +649,10 @@ if __name__ == "__main__":
     
     # 1. Yêu cầu người dùng nhập số lượng luồng
     num_threads = choose_thread_count(args)
+    if IS_TERMUX and num_threads > 2:
+        logger.warning("Termux requested %s threads; clamping to 2 for stability.", num_threads)
+        console.print("[yellow]Termux se tu gioi han toi da 2 luong de tranh page disconnect.[/]")
+        num_threads = 2
     logger.info(
         "Cấu hình chạy: threads=%s, browser_path=%s, headless=%s, no_window_tiling=%s, termux=%s, display=%s, temp_dir=%s",
         num_threads,
