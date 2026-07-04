@@ -111,7 +111,14 @@ pkg install termux-x11-nightly
 
 Nếu chạy `termux-x11 :0` báo `Termux:X11 application is not found`, nghĩa là Android APK companion chưa được cài hoặc không cùng nguồn/chữ ký với Termux. Cài APK mới nhất từ GitHub Termux:X11 releases, chọn `app-arm64-v8a-debug.apk` hoặc `app-universal-debug.apk`, sau đó mở app Termux:X11 một lần.
 
-Nếu đang dùng Termux:X11, cần chạy tool trong shell có biến `DISPLAY`. Ví dụ:
+Nếu đang dùng Termux:X11, bản mới của tool có thể tự:
+- mở app companion `com.termux.x11/.MainActivity`
+- khởi động `termux-x11`
+- tự set `DISPLAY=:0`
+- tự dựng `DBUS_SESSION_BUS_ADDRESS`
+- chờ X11 sẵn sàng rồi mới mở Chromium
+
+Bạn vẫn có thể tự chạy tay nếu muốn:
 
 ```bash
 termux-x11 :0 &
@@ -122,18 +129,23 @@ export DBUS_SESSION_BUS_ADDRESS="$(dbus-daemon --session --fork --print-address)
 Test Chromium có GUI:
 
 ```bash
-chromium-browser --no-sandbox --user-data-dir=/tmp/chrome-test https://example.com
+mkdir -p "$TMPDIR/chrome-test"
+chromium-browser --no-sandbox --user-data-dir="$TMPDIR/chrome-test" https://example.com
 ```
 
-Nếu Chromium mở cửa sổ trong app Termux:X11, chạy tool ở chế độ GUI:
+Chạy tool ở chế độ GUI:
 
 ```bash
 python reg_accTTC.py --mobile --gui -t 1 --browser-path "$(which chromium-browser)"
 ```
 
-Nếu log vẫn hiện `headless=True`, nghĩa là shell chạy tool chưa có `DISPLAY` hoặc bạn chưa pull bản mới.
+Nếu auto-start báo lỗi `Termux:X11 application is not found` hoặc `termux-x11 thoat som`, nguyên nhân thường là companion app Android chưa cài, chưa mở một lần, hoặc không cùng nguồn/chữ ký với app Termux.
+
+Nếu log vẫn hiện `headless=True`, nghĩa là bạn chưa chạy với `--gui` hoặc đang dùng bản cũ chưa pull.
 
 Các warning `xkbcomp` thường không fatal. Các warning DBus của Chromium sẽ giảm khi đã export `DBUS_SESSION_BUS_ADDRESS`; nếu Chromium vẫn mở cửa sổ được thì có thể bỏ qua.
+
+Nếu Chromium báo `Failed To Create Data Directory`, nguyên nhân thường là đang trỏ `--user-data-dir` vào đường dẫn không ghi được như `/tmp/...`. Trên Termux hãy ưu tiên `$TMPDIR/...` hoặc thư mục bên trong `$HOME`.
 
 Chọn preset mobile hoặc PC:
 
@@ -146,6 +158,12 @@ Log ngoại lệ được ghi vào:
 
 ```bash
 tail -f reg_accTTC.log
+```
+
+Nếu log có `FLAC converter is unavailable`, cài thêm:
+
+```bash
+pkg install flac
 ```
 
 Nếu log có `Audio CAPTCHA không khả dụng` hoặc `Google did not provide a reCAPTCHA audio source`, nghĩa là reCAPTCHA trên Chromium headless/Termux không cung cấp audio challenge. Tool sẽ tự chờ một khoảng rồi reset session thay vì retry liên tục.

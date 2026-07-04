@@ -1,4 +1,5 @@
 import os
+import shutil
 import urllib.request
 import random
 import tempfile
@@ -9,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Optional
 from DrissionPage import ChromiumPage
+from speech_recognition.audio import get_flac_converter
 
 logger = logging.getLogger("reg_accTTC.recaptcha")
 DEBUG_DIR = Path(os.getenv("RECAPTCHA_DEBUG_DIR", "recaptcha_debug"))
@@ -18,6 +20,9 @@ class RecaptchaSolverError(Exception):
 
 class AudioChallengeUnavailableError(RecaptchaSolverError):
     """Raised when Google does not provide an audio challenge source."""
+
+class AudioDependencyError(RecaptchaSolverError):
+    """Raised when local audio-processing dependencies are missing."""
 
 def driver_context(driver: ChromiumPage) -> str:
     context = []
@@ -344,6 +349,7 @@ class RecaptchaSolver:
         Returns:
             str: Recognized text from the audio file
         """
+        self._ensure_audio_dependencies()
         mp3_path = os.path.join(self.TEMP_DIR, f"{random.randrange(1,1000)}.mp3")
         wav_path = os.path.join(self.TEMP_DIR, f"{random.randrange(1,1000)}.wav")
 
@@ -367,6 +373,26 @@ class RecaptchaSolver:
                         os.remove(path)
                     except OSError:
                         logger.exception("Không xóa được file audio tạm: %s", path)
+
+    def _ensure_audio_dependencies(self) -> None:
+        ffmpeg_path = getattr(pydub.AudioSegment, "converter", None)
+        if not ffmpeg_path or not Path(str(ffmpeg_path)).exists():
+            raise AudioDependencyError(
+                "FFmpeg is unavailable. Install/configure ffmpeg before solving audio reCAPTCHA."
+            )
+
+        try:
+            flac_path = get_flac_converter()
+        except OSError as e:
+            raise AudioDependencyError(
+                "FLAC converter is unavailable. On Termux run: pkg install flac"
+            ) from e
+
+        flac_path = str(flac_path)
+        if not Path(flac_path).exists() and not shutil.which(flac_path):
+            raise AudioDependencyError(
+                "FLAC converter is unavailable. On Termux run: pkg install flac"
+            )
 
     def is_solved(self) -> bool:
         """Check if the captcha has been solved successfully."""

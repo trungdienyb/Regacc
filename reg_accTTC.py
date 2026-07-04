@@ -2,13 +2,19 @@ import argparse
 import logging
 import os, time, random, string, secrets
 import shutil
+import socket
+import subprocess
 import tempfile
 import threading
 import queue
 import math
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from GoogleRecaptchaBypass.RecaptchaSolver import AudioChallengeUnavailableError, RecaptchaSolver
+from GoogleRecaptchaBypass.RecaptchaSolver import (
+    AudioChallengeUnavailableError,
+    AudioDependencyError,
+    RecaptchaSolver,
+)
 from DrissionPage import ChromiumPage, ChromiumOptions
 from pydub import AudioSegment
 import pydub.utils
@@ -89,6 +95,126 @@ def configure_audio_tools():
         AudioSegment.converter = ffmpeg_path
     if ffprobe_path:
         pydub.utils.get_prober_name = lambda: ffprobe_path
+
+def resolve_runtime_temp_dir() -> Path:
+    candidates = []
+    tmpdir = os.environ.get("TMPDIR")
+    if tmpdir:
+        candidates.append(Path(tmpdir))
+    candidates.append(Path(tempfile.gettempdir()))
+    candidates.append(BASE_DIR / ".tmp")
+
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            test_file = candidate / ".write_test"
+            test_file.write_text("ok", encoding="utf-8")
+            test_file.unlink(missing_ok=True)
+            return candidate
+        except Exception:
+            logger.debug("Khong dung duoc temp dir: %s", candidate, exc_info=True)
+
+    raise RuntimeError("Khong tim thay thu muc temp co quyen ghi.")
+
+def reserve_free_local_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        sock.listen(1)
+        return sock.getsockname()[1]
+
+def ensure_termux_dbus_session() -> str | None:
+    session_bus = os.environ.get("DBUS_SESSION_BUS_ADDRESS")
+    if session_bus:
+        return session_bus
+
+    dbus_daemon = shutil.which("dbus-daemon")
+    if not dbus_daemon:
+        logger.warning("Khong tim thay dbus-daemon trong Termux.")
+        return None
+
+    try:
+        output = subprocess.check_output(
+            [dbus_daemon, "--session", "--fork", "--print-address"],
+            stderr=subprocess.STDOUT,
+            text=True,
+        ).strip()
+    except Exception:
+        log_exception("Khong khoi dong duoc DBus session cho Termux.")
+        return None
+
+    if output:
+        os.environ["DBUS_SESSION_BUS_ADDRESS"] = output
+        return output
+    return None
+
+def start_termux_x11_companion_app() -> None:
+    am_command = shutil.which("am")
+    if not am_command:
+        logger.warning("Khong tim thay lenh am de mo app Termux:X11 companion.")
+        return
+
+    try:
+        subprocess.run(
+            [am_command, "start", "-n", "com.termux.x11/com.termux.x11.MainActivity"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except Exception:
+        log_exception("Khong mo duoc app Termux:X11 companion bang am start.")
+
+def wait_for_termux_x11_ready(display: str, timeout: int = 12) -> None:
+    display_number = display.lstrip(":").split(".")[0] or "0"
+    candidate_dirs = []
+    for raw_dir in (os.environ.get("TMPDIR"), tempfile.gettempdir(), "/tmp"):
+        if raw_dir:
+            candidate_dirs.append(Path(raw_dir) / ".X11-unix")
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        for candidate_dir in candidate_dirs:
+            socket_path = candidate_dir / f"X{display_number}"
+            if socket_path.exists():
+                logger.info("Termux:X11 san sang. socket=%s", socket_path)
+                return
+        time.sleep(0.5)
+
+    logger.warning(
+        "Khong xac nhan duoc X11 socket cho display=%s sau %ss, tiep tuc khoi tao Chromium theo best effort.",
+        display,
+        timeout,
+    )
+
+def ensure_termux_x11_server() -> str:
+    display = os.environ.get("DISPLAY") or ":0"
+    os.environ["DISPLAY"] = display
+
+    termux_x11 = shutil.which("termux-x11")
+    if not termux_x11:
+        raise RuntimeError("Khong tim thay lenh termux-x11. Hay cai package termux-x11-nightly.")
+
+    start_termux_x11_companion_app()
+    time.sleep(1)
+
+    try:
+        process = subprocess.Popen(
+            [termux_x11, display],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as e:
+        raise RuntimeError(f"Khong the khoi dong termux-x11: {e}") from e
+
+    time.sleep(2)
+    return_code = process.poll()
+    if return_code not in (None, 0):
+        raise RuntimeError(
+            "termux-x11 thoat som. Kiem tra companion app Termux:X11 da cai va da mo tren Android chua."
+        )
+
+    wait_for_termux_x11_ready(display)
+    return display
 
 def resolve_browser_path(cli_browser_path=None):
     if cli_browser_path:
@@ -291,7 +417,7 @@ def clear_browser_state(driver, worker_id: int):
 # ======================================================================
 def worker_task(worker_id: int, total_threads: int, thread_states: dict):
     chrome_path = RUNTIME_CONFIG.get("browser_path")
-    current_port = random.randint(9000, 9999)
+    current_port = reserve_free_local_port()
     thread_states[worker_id]["port"] = current_port
     
     driver = None
@@ -312,9 +438,16 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
             "--disable-features=UseDBus,MediaRouter",
             "--disable-logging", "--log-level=3",
             "--disable-blink-features=AutomationControlled",
+            "--remote-allow-origins=*",
             "--mute-audio" # Tắt tiếng trình duyệt để đỡ ồn khi chạy nhiều luồng
         ]
-        for arg in args: options.set_argument(arg)
+        if IS_TERMUX and not RUNTIME_CONFIG.get("headless"):
+            args.extend([
+                "--ozone-platform=x11",
+                "--enable-features=UseOzonePlatform",
+            ])
+        for arg in args:
+            options.set_argument(arg)
         if RUNTIME_CONFIG.get("headless"):
             options.headless()
             options.set_user_agent(
@@ -323,11 +456,33 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
             )
             options.set_argument("--window-size=1280,720")
 
-        user_data_path = Path(tempfile.gettempdir()) / f"ttc_chromium_{worker_id}_{current_port}"
+        user_data_base = Path(RUNTIME_CONFIG.get("temp_dir", resolve_runtime_temp_dir()))
+        user_data_path = user_data_base / f"ttc_chromium_{worker_id}_{current_port}"
         options.set_user_data_path(str(user_data_path))
 
         # Mở trình duyệt
-        driver = ChromiumPage(addr_or_opts=options)
+        last_error = None
+        startup_attempts = 3 if IS_TERMUX else 1
+        for attempt in range(1, startup_attempts + 1):
+            try:
+                driver = ChromiumPage(addr_or_opts=options)
+                break
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    "Thread-%s: khoi tao Chromium that bai lan %s/%s. port=%s profile=%s",
+                    worker_id,
+                    attempt,
+                    startup_attempts,
+                    current_port,
+                    user_data_path,
+                    exc_info=True,
+                )
+                if attempt == startup_attempts:
+                    raise
+                time.sleep(2 + attempt)
+        if driver is None and last_error is not None:
+            raise last_error
         
         if not RUNTIME_CONFIG.get("no_window_tiling"):
             try:
@@ -366,6 +521,15 @@ def worker_task(worker_id: int, total_threads: int, thread_states: dict):
             update_state(thread_states, worker_id, "Đang giải mã âm thanh reCAPTCHA...", "magenta")
             try:
                 recaptchaSolver.solveCaptcha()
+            except AudioDependencyError as e:
+                logger.error(
+                    "Thread-%s: thieu dependency xu ly audio. %s",
+                    worker_id,
+                    e,
+                    exc_info=True,
+                )
+                update_state(thread_states, worker_id, f"Thiếu dependency audio: {e}", "red")
+                break
             except AudioChallengeUnavailableError:
                 logger.warning(
                     "Thread-%s: Google không cung cấp audio source reCAPTCHA; chờ %s giây rồi reset session.",
@@ -437,7 +601,20 @@ if __name__ == "__main__":
         console.print("[bold red]Chỉ được chọn một trong --gui hoặc --headless.[/]")
         raise SystemExit(1)
 
-    display = os.environ.get("DISPLAY")
+    if IS_TERMUX and args.gui:
+        try:
+            display = ensure_termux_x11_server()
+            dbus_session = ensure_termux_dbus_session()
+            logger.info(
+                "Da khoi dong Termux:X11 tu dong. display=%s, dbus=%s",
+                display,
+                dbus_session or "<unavailable>",
+            )
+        except Exception as e:
+            console.print(f"[bold red]Khong the tu dong khoi dong Termux:X11: {e}[/]")
+            raise SystemExit(1)
+    else:
+        display = os.environ.get("DISPLAY")
     auto_headless = IS_TERMUX and not display and not args.gui
     if args.gui and not display:
         console.print("[bold red]Bạn chọn --gui nhưng chưa có DISPLAY. Hãy export DISPLAY=:0 trước khi chạy.[/]")
@@ -447,6 +624,7 @@ if __name__ == "__main__":
         "browser_path": resolve_browser_path(args.browser_path),
         "headless": False if args.gui else (args.headless or auto_headless),
         "no_window_tiling": args.no_window_tiling or IS_TERMUX,
+        "temp_dir": resolve_runtime_temp_dir(),
     }
 
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -467,13 +645,14 @@ if __name__ == "__main__":
     # 1. Yêu cầu người dùng nhập số lượng luồng
     num_threads = choose_thread_count(args)
     logger.info(
-        "Cấu hình chạy: threads=%s, browser_path=%s, headless=%s, no_window_tiling=%s, termux=%s, display=%s",
+        "Cấu hình chạy: threads=%s, browser_path=%s, headless=%s, no_window_tiling=%s, termux=%s, display=%s, temp_dir=%s",
         num_threads,
         RUNTIME_CONFIG["browser_path"],
         RUNTIME_CONFIG["headless"],
         RUNTIME_CONFIG["no_window_tiling"],
         IS_TERMUX,
         display,
+        RUNTIME_CONFIG["temp_dir"],
     )
     
     # Khởi tạo bộ nhớ UI State
